@@ -1,16 +1,24 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import joblib
 import pandas as pd
 from pathlib import Path
 from pydantic import BaseModel
 from src.features.build_features import create_features
+from simulate_drift import run_simulation
 
 app = FastAPI(title="Solar Power Forecasting API")
 
-# Load the model once when the server starts
+# Load the model and report once when the server starts
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = ROOT / "models" / "solar_model.joblib"
+REPORT_PATH = ROOT / "reports" / "drift_report.html"
 model = joblib.load(MODEL_PATH)
+
+# MOUNT the reports folder
+# This allows the browser to access files in /reports via the /static URL
+app.mount("/static-reports", StaticFiles(directory=str(ROOT / "reports")), name="reports")
 
 # Define the expected input data structure
 class PredictionInput(BaseModel):
@@ -56,3 +64,28 @@ def predict_power(data: PredictionInput):
         "prediction_kw": round(float(prediction[0]), 2),
         "input_received": data.dict()
     }
+
+@app.get("/monitor")
+def trigger_monitoring():
+    """
+    Triggers the drift simulation and returns the generated HTML report.
+    """
+    # 1. Run the simulation (this updates reports/drift_report.html)
+    print("🚀 Triggering monitoring simulation...")
+    run_simulation()
+    
+    # 2. Check if the file was actually created
+    if not REPORT_PATH.exists():
+        return {"error": "Report generation failed."}
+
+    # 3. Return the HTML file directly to the browser
+    return FileResponse(
+        path=REPORT_PATH, 
+        media_type="text/html",
+        filename="solar_drift_report.html"
+    )
+
+@app.get("/report-link")
+def get_report_url():
+    """Returns a JSON link to the report if you don't want to auto-load the HTML."""
+    return {"report_url": "/static-reports/drift_report.html"}

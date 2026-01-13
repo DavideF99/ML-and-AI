@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the entire project into the container
 COPY . .
 
+# Ensure the reports directory exists inside the container
+RUN mkdir -p reports
+
 # Expose the port FastAPI runs on
 EXPOSE 8000
 
